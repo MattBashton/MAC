@@ -23,7 +23,9 @@ load("Entire_10000_June2015.RData")
 
 # Obtained by MME fit distribution from the final probability estimates of
 # validation cohort (n=276 Hoves.), Jan. 2016
-GoldCohort.Threshold1 <- 0.7045746  
+#GoldCohort.Threshold1 <- 0.7045746  
+
+GoldCohort.Threshold1 <- 0.72
 
 ## 220 Training set - 22 December 2015/Updated 14 January 2016
 Trainingset450k_4Metagene_WithSubgroup <- as.matrix(read.csv("220TrainingCohort450KSubgrouping_4MetagenesANDSubgroupLabels_14Jan2016.csv",header=T,row.names=1))
@@ -154,48 +156,67 @@ prob.test <- signif(attr(test.pred, "probabilities"), digits=2)
 maxProbs <- apply(prob.test,1,max)
 
 Total.No.of.Samples <- ncol(hov.H)
-presumed.class <- c(rep("Unknown",Total.No.of.Samples))
-
 
 maxProbsWhich <- factor(test.pred[1:nrow(prob.test)],levels=c("WNT", "SHH", "Grp3", "Grp4"))
 
 ## identify the threshold
-Threshold.Min <- GoldCohort.Threshold1  # obtained by MME fit distribution of final probability estimates, 07 January 2016
-maxProbsWhich <- factor(test.pred[1:nrow(prob.test)],levels=c("WNT", "SHH", "Grp3", "Grp4", "NC"))
+threshold <- GoldCohort.Threshold1  # obtained by MME fit distribution of final probability estimates, 07 January 2016
 
-for (i in 1:nrow(prob.test))
-{
-  if (maxProbs[i] < Threshold.Min)
-    maxProbsWhich[i] <- "NC"      
-}
+# Tmp re-level.
+levels(maxProbsWhich) <- c(1,2,3,4)
 
-maxProbsCol <- ifelse(maxProbsWhich=="WNT","blue",ifelse(maxProbsWhich=="SHH","brown1",
-                                                         ifelse(maxProbsWhich=="Grp3","khaki",
-                                                                ifelse(maxProbsWhich=="Grp4","SeaGreen","SlateGray4")))) # else: "NC"
+maxProbsCol <- ifelse(maxProbsWhich==1,"blue",ifelse(maxProbsWhich==2,"red",
+                                                     ifelse(maxProbsWhich==3,"yellow2","darkgreen")))
 
-maxProbsCol2 <- ifelse(maxProbsCol=="blue","#0000FF66", ifelse(maxProbsCol=="brown1","#FF000066",
-                                                               ifelse(maxProbsCol=="khaki","#F0E68C", 
-                                                                      ifelse(maxProbsCol=="SeaGreen","#2E8B57","#6C7B8B"))))
+maxProbsCol2 <- ifelse(maxProbsCol=="yellow2","#EEEE0066", ifelse(maxProbsCol=="blue","#0000FF66",
+                                                                  ifelse(maxProbsCol=="darkgreen","#00640066","#FF000066")))
 
-## Showing the results
+# MB Output for classification table 
+levels(maxProbsWhich) <- c("WNT", "SHH", "Grp3", "Grp4")
+results.df <- data.frame(names(maxProbsWhich), as.character(maxProbsWhich), maxProbs, row.names = NULL, stringsAsFactors = FALSE)
+colnames(results.df) <- c("Sample", "Subgroup", "Confidence") 
+
+# New plot code
+cat(paste("Removing data points below threshold", threshold, "from graph:\n"))
+index <- maxProbs > threshold
+cat(names(maxProbs[!index]), "\n")
+new.probs2 <- probs2[,index]
+new.maxProbs <- maxProbs[index]
+new.maxProbsWhich <- maxProbsWhich[index]
+new.maxProbsCol <- maxProbsCol[index]
+new.maxProbsCol2 <- maxProbsCol2[index]
+new.Total.No.of.Samples <- length(maxProbs[index])
+
 par(mfrow=c(1,1))
-par(mar=c(6,4,2,1) + 0.1)
+#par(mar=c(6,4,2,1) + 0.1)
+par(mar=c(6,4,4,1) + 0.1)
 par(cex=1.3)
-par(cex.axis=0.5)
+par(cex.axis=1)
 
-heading = paste("450K subgroup prediction for", Total.No.of.Samples, "Hovestadt samples using 4 metagenes")##
+heading <- paste("Medulloblastoma subgroup call confidence intervals for", new.Total.No.of.Samples, "samples")
 
-boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",probs2[,order(maxProbsCol, maxProbs)],outpch=NA,ylim=c(0,1),las=2, notch=FALSE,
-        col=maxProbsCol2[order(maxProbsCol,maxProbs)] )
+boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",new.probs2[,order(new.maxProbsWhich, new.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
+        col=new.maxProbsCol2[order(new.maxProbsWhich,new.maxProbs)] )
 
-abline(col="red",lty=1, v=)
-abline(col="grey",lty=1, h=GoldCohort.Threshold1)
-tmp <- table(maxProbsCol)
+abline(col="grey",lty = 1, h = threshold)
 
-grp.sum <- cumsum(c(tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]))
+# How many subgroups of each colour are we plotting
+tmp <- table(new.maxProbsCol)
+desired_col_order <-c("blue", "red", "yellow2", "darkgreen")
+to_sort <- names(tmp)
+# Re order by correct sub group col order using match on the desired_col_order vector
+tmp <- tmp[to_sort[order(match(to_sort,desired_col_order))]]
+# Index of where to draw the sub group deviders via cumsum
+grp.sum <- cumsum(tmp)
+# Add 0.5 to grp.sum for abline
+grp.sum <- grp.sum + 0.5
+# Index out final element of grp.sum to get rid of unwanted final abline
+grp.sum <- grp.sum[1:length(grp.sum)-1]
+# Check
+grp.sum
+abline(v=grp.sum)
+#lines(col="black",lwd=2,new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+points(col=new.maxProbsCol[order(new.maxProbsWhich,new.maxProbs)],pch=19, new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+legend("bottomleft", legend = c("WNT", "SHH", "Grp3", "Grp4"), col=c("blue", "red", "yellow2", "darkgreen"), pch=19)   
+axis(2, las=2)             
 
-abline(v=c(grp.sum[1] + 0.5, grp.sum[2] +0.5, grp.sum[3]+0.5, grp.sum[4]+0.5, grp.sum[5]+0.5))
-
-points(col=maxProbsCol[order(maxProbsCol,maxProbs)],pch=20, maxProbs[order(maxProbsCol,maxProbs)]) 
-
-axis(2, las=2)

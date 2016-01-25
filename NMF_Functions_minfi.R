@@ -120,8 +120,5 @@ DW.MP.Match.and.Select<-function(
    row.names(V) <- W.names
    return(V)
 
-}
-
-
-
-
+ }
+ 
