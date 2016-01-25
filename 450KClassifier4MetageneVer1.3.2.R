@@ -1,53 +1,46 @@
-##############################################################################################
-############################## 450K Classifiation Program  ###################################
-##############################################################################################
-# 450K Methylation Classifiation Project
-# Dr Reza Rafiee, Research Associate at NICR, Newcastle University, 14 January 2016
+
+# Methylation Array Classifier (MAC)
+# Classifier code be Dr Reza Rafiee, 2015-2016
+# Shiny web code Dr Matthew Bashton, 2016
 # 450K Classifer, Software Version 1.3.2 (Successful version)
 # Baed on NMF projection and SVM algorithm
-# Because of the copyright law, You should not redistribute this code in any way.
-##############################################################################################
+
 # Input: NMB samples include: 
 # beta values of 10,000 probes from 450K methylation profiling 
-##############################################################################################
+
 # Output:
 # Classifier confidence and subgroup labels for input samples
 # 4-group classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
-##############################################################################################
-#STARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTARTSTART
-##############################################################################################
-##############################################################################################
-setwd("~/450kClassifier/")
+
 library(e1071)
 library(parallel)
 ## Load code for metagene projection
-source("../NMF_Functions_minfi.R")
+source("NMF_Functions_minfi.R")
+
 ## Get same 10000 probes that went into 434 classifier
 ## Load 10000 probes
 load("Entire_10000_June2015.RData")
 
 GoldCohort.Threshold1 <- 0.7045746  # obtained by MME fit distribution from the final probability estimates of validation cohort (n=276 Hoves.), Jan. 2016
 
-############################################################# 220 Training set - 22 December 2015/Updated 14 January 2016
-# Original file: 450KTrainingSet_Oct2015_250_run_Avg_H_values_10000probe_Sequenom_Cohort_NoX_4_Metagenes_4_Clusters_22122015.csv
-Trainingset450k_4Metagene_WithSubgroup <- as.matrix(read.csv("~/450kClassifier/220TrainingCohort450KSubgrouping_4MetagenesANDSubgroupLabels_14Jan2016.csv",header=T,row.names=1))
+## 220 Training set - 22 December 2015/Updated 14 January 2016
+Trainingset450k_4Metagene_WithSubgroup <- as.matrix(read.csv("220TrainingCohort450KSubgrouping_4MetagenesANDSubgroupLabels_14Jan2016.csv",header=T,row.names=1))
 Trainingset450k4M <- Trainingset450k_4Metagene_WithSubgroup[,1:4]
 labels220 <- as.character(Trainingset450k_4Metagene_WithSubgroup[,5])
 subgroup_labels <- factor(labels220)
 y1 <- subgroup_labels
 #-----------------------------------------------------------------
+
 ## Give names to groups
-grp.4 <- ifelse(y1 == 1, "WNT", ifelse(y1 == 2,"SHH",
-                                                      ifelse(y1== 3 ,"Grp3","Grp4")))
+grp.4 <- ifelse(y1 == 1, "WNT", ifelse(y1 == 2,"SHH", ifelse(y1== 3 ,"Grp3","Grp4")))
 ## Load W matrix
 bar <- get(load('2goldStandard_W_EntireCohort_10000.RData'))
 avgW.4 <- bar[[4]]
-
 Groups <- factor(grp.4, levels=c("WNT","SHH","Grp3","Grp4"))
 trainH <- Trainingset450k4M 
 
-# Preparing Input Dataset
-#############################################################
+
+## Preparing Input Dataset
 # Input dataset: 15 samples of Volker Hovstetadt dataset
 hov.final <- readRDS("15Test_Samples_450K.rds")
 
@@ -59,15 +52,14 @@ hov.match <- DW.MP.Match.and.Select(disc.10, hov.10)
 ## Match W matrix
 hov.H <- DW.MP.Factors.Project.C(hov.10, avgW.4)  # applying the Moore-Penrose pseduoinverse of Wm (avgw.4) to the input data.
 
-################################################################################################################
-# Creating the classifier model using SVM
-# 
-Optimised_cost <- 1.4   #Ed:21.2
-Optimised_Gamma <- 0.02  #Ed:0.13
-## Further analysis to assess confidence of calls ###########
 
+## Creating the classifier model using SVM
+
+Optimised_cost <- 1.4   
+Optimised_Gamma <- 0.02  
+
+## Further analysis to assess confidence of calls
 x <- 1000 ## Number of iterations
-
 
 train.beta <- trainH 
 amount <- round(0.80*nrow(train.beta)) 
@@ -78,9 +70,8 @@ sel2<- lapply(1:x, function(i) {
 })
 
 ## MB this bit causes a delay
-
 Radial.svms <- mclapply(1:x, 
-                        mc.cores=16,
+                        mc.cores=8,
                         function(i)  svm(x = trainH[sel2[[i]],],  #t(trainH)[sel2[[i]],],
                                          y = Groups[sel2[[i]]], scale = F,
                                          tolerance = 0.00001, type = "C-classification",
@@ -91,16 +82,13 @@ Radial.svms <- mclapply(1:x,
 
 
 ## Test on input samples (hov)
-
 Radial.tests <- mclapply(1:x,
-                         mc.cores=16,
+                         mc.cores=8,
                          function(i) predict(Radial.svms[[i]],
                                              newdata=t(hov.H), # 4 Metagenes of input dataset 
                                              decision.values = T,
                                              probability = T)
 )
-
-
 prob.test <- (lapply(1:x,
                      function(i) attr(Radial.tests[[i]], "probabilities"))
 )
@@ -150,7 +138,6 @@ for (ttt in 1:nrow(predProbTemp)) # number of samples
 }
 ####################################### creating pobes2 #############################################
 # End of "Creating the final model for whole training set with selected parameters"
-
 final.model <- svm(x = trainH, y = factor(Groups), scale=F,  
                    tolerance = 0.00001, type="C-classification", kernel = "radial",
                    probability = T, seed = 123456, cost = Optimised_cost, gamma = Optimised_Gamma)
