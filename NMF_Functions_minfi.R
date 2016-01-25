@@ -1,48 +1,5 @@
 ### Functions
 
-# Function to generate nice green black red heatmaps
-
-odd <- function(x) x!=as.integer(x/2)*2
-even <- function(x) x==as.integer(x/2)*2
-
-# Function colorpanel
-
-colorpanel <- function(n,low='green',mid='black',high='red')
-   {
-     if(even(n)) warning("n is even: colors panel will not be symmetric")
-
-     # convert to rgb
-     low <- col2rgb(low)
-     mid <- col2rgb(mid)
-     high <- col2rgb(high)
-
-     # determine length of each component
-     lower <- floor(n/2)
-     upper <- n - lower
-
-     red  <- c(
-               seq(low[1,1], mid [1,1], length=lower),
-               seq(mid[1,1], high[1,1], length=upper)
-               )/255
-
-     green <- c(
-                seq(low[3,1], mid [3,1], length=lower),
-                seq(mid[3,1], high[3,1], length=upper)
-                )/255
-     blue <- c(
-              seq(low[2,1], mid [2,1], length=lower),
-               seq(mid[2,1], high[2,1], length=upper)
-               )/255
-
-
-     rgb(red,blue,green)
-   }
-
-# Generate green-black-red colourscale
-
-bluepink <- function(n) colorpanel(n, 'blue', 'white', 'red' )
-
-
 DW.MP.Match.and.Select<-function(
    input1.matrix,
    input2.matrix)
@@ -52,8 +9,6 @@ DW.MP.Match.and.Select<-function(
 # Match the genes of the first dataset on the second and select those rows from the second
 
 # start of methodology
-
-   #print(c("Running MP.Match.and.Select... on: ", input1.matrix, " ", input2.matrix))
 
 # Read input datasets
 
@@ -78,9 +33,7 @@ DW.MP.Match.and.Select<-function(
 
 # Save dataset
 
-
    V<-input2.matrix[gs.names2,]
-   #exprs(V) <- m2
    return(as.matrix(V))
 
 }
@@ -89,7 +42,6 @@ DW.MP.Match.and.Select<-function(
    input.eset,
    factors.list,
    postprojnorm = TRUE,
-   #output.file,
    method = "pseudo-inverse") {
 # method: pseudo-inverse, nnls-solver
 
@@ -108,7 +60,6 @@ DW.MP.Match.and.Select<-function(
 
 # Read factors dataset
 
-   #W <- as.data.frame(factors.list@fit@W)
    W <- factors.list
    W.row.names <- row.names(W)
    W.row.descs <- row.names(W)
@@ -134,7 +85,7 @@ DW.MP.Match.and.Select<-function(
    if (method == "pseudo-inverse") {
 
 # Project input dataset using factors input
-
+     
    H <- ginv(W2) %*% m2
 
 
@@ -147,14 +98,11 @@ DW.MP.Match.and.Select<-function(
    }
 
  # print(c("projecting using NNLS solver..."))
-
-
   } else {
     stop("unknown method")
   }
 
 # Normalize projected dataset to the unit hypersphere
-
   if (postprojnorm == TRUE) {
      n.col <- length(H[1,])
      for (i in 1:n.col) {
@@ -174,7 +122,6 @@ DW.MP.Match.and.Select<-function(
 
 }
 
-one.over <- function(x) { return(100/length(x)) }
 
 
 

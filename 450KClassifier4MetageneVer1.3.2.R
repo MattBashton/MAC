@@ -1,19 +1,19 @@
-
 # Methylation Array Classifier (MAC)
 # Classifier code be Dr Reza Rafiee, 2015-2016
 # Shiny web code Dr Matthew Bashton, 2016
 # 450K Classifer, Software Version 1.3.2 (Successful version)
 # Baed on NMF projection and SVM algorithm
 
-# Input: NMB samples include: 
-# beta values of 10,000 probes from 450K methylation profiling 
+# Input: NMB samples include: beta values of 10,000 probes from 450K methylation
+# profiling
 
-# Output:
-# Classifier confidence and subgroup labels for input samples
-# 4-group classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
+# Output: Classifier confidence and subgroup labels for input samples 4-group
+# classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
 
+# Load librarys
 library(e1071)
 library(parallel)
+
 ## Load code for metagene projection
 source("NMF_Functions_minfi.R")
 
@@ -21,12 +21,17 @@ source("NMF_Functions_minfi.R")
 ## Load 10000 probes
 load("Entire_10000_June2015.RData")
 
-GoldCohort.Threshold1 <- 0.7045746  # obtained by MME fit distribution from the final probability estimates of validation cohort (n=276 Hoves.), Jan. 2016
+# Obtained by MME fit distribution from the final probability estimates of
+# validation cohort (n=276 Hoves.), Jan. 2016
+GoldCohort.Threshold1 <- 0.7045746  
 
 ## 220 Training set - 22 December 2015/Updated 14 January 2016
 Trainingset450k_4Metagene_WithSubgroup <- as.matrix(read.csv("220TrainingCohort450KSubgrouping_4MetagenesANDSubgroupLabels_14Jan2016.csv",header=T,row.names=1))
+# Remove subgroup col
 Trainingset450k4M <- Trainingset450k_4Metagene_WithSubgroup[,1:4]
+# Extract 220 subgroup labels
 labels220 <- as.character(Trainingset450k_4Metagene_WithSubgroup[,5])
+# Convert to factor
 subgroup_labels <- factor(labels220)
 y1 <- subgroup_labels
 #-----------------------------------------------------------------
@@ -54,7 +59,6 @@ hov.H <- DW.MP.Factors.Project.C(hov.10, avgW.4)  # applying the Moore-Penrose p
 
 
 ## Creating the classifier model using SVM
-
 Optimised_cost <- 1.4   
 Optimised_Gamma <- 0.02  
 
@@ -196,14 +200,3 @@ abline(v=c(grp.sum[1] + 0.5, grp.sum[2] +0.5, grp.sum[3]+0.5, grp.sum[4]+0.5, gr
 points(col=maxProbsCol[order(maxProbsCol,maxProbs)],pch=20, maxProbs[order(maxProbsCol,maxProbs)]) 
 
 axis(2, las=2)
-
-# # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# table(as.character(hov.calls),as.character(RefSub.Hov[61:75]))  # confusion matrix (Sequenom vs. 450K call)
-
-# Cofusion Matrix for the 15 test samples: All correctly subgrouped, 14 January 2016
-#       Grp3 Grp4 SHH WNT
-# Grp3    4    0   0   0
-# Grp4    0    4   0   0
-# SHH     0    0   4   0
-# WNT     0    0   0   3
-
