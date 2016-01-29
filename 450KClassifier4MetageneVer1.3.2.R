@@ -10,6 +10,10 @@
 # Output: Classifier confidence and subgroup labels for input samples 4-group
 # classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
 
+# For display later  
+AppName <- "Methylation Array Classifier (MAC)"
+AppVersion <- "1.3.2"
+
 # Load librarys
 library(e1071)
 library(parallel)
@@ -50,7 +54,9 @@ trainH <- Trainingset450k4M
 
 ## Preparing Input Dataset
 # Input dataset: 15 samples of Volker Hovstetadt dataset
-hov.final <- readRDS("15Test_Samples_450K.rds")
+tmp <- read.csv("www/GSE54880_test_set.csv")
+hov.final <- as.matrix(tmp[,-1])
+rownames(hov.final) <- tmp[,1]
 
 # check the probe names, choose only those 10,000 probes which are matched with the reference (n=434 Classifier) 
 hov.10 <- hov.final[rownames(hov.final) %in% rownames(disc.10),]
