@@ -325,6 +325,71 @@ shinyServer(function(input, output) {
   # End output graph ################
   
   
+  # Output graph download ####################
+  ## MB totally reworked to get sane graph of WNT, SHH, Grp3, Grp4
+  output$PlotDownload <- downloadHandler(
+    
+    filename = "MB_classification.png",
+    content = function(file) {
+      
+      classified_data <- classifier()
+      if (is.null(classified_data)) return(NULL)
+      
+      Total.No.of.Samples <- classified_data$Total.No.of.Samples 
+      probs2 <- classified_data$probs2
+      maxProbsWhich <- classified_data$maxProbsWhich
+      maxProbs <- classified_data$maxProbs
+      maxProbsCol <- classified_data$maxProbsCol
+      maxProbsCol2 <- classified_data$maxProbsCol2
+      
+      # Code to remove samples below threshold from plot
+      cat(paste("Removing data points below threshold", threshold, "from graph:\n"))
+      index <- maxProbs > threshold
+      cat(names(maxProbs[!index]), "\n")
+      new.probs2 <- probs2[,index]
+      new.maxProbs <- maxProbs[index]
+      new.maxProbsWhich <- maxProbsWhich[index]
+      new.maxProbsCol <- maxProbsCol[index]
+      new.maxProbsCol2 <- maxProbsCol2[index]
+      new.Total.No.of.Samples <- length(maxProbs[index])
+      
+      heading <- paste("Medulloblastoma subgroup call confidence intervals for", new.Total.No.of.Samples, "samples")
+      
+      png(file, height = 1280, width = 1440)
+      par(mfrow=c(1,1))
+      par(mar=c(7,4,4,1) + 0.1)
+      par(cex=2)
+      par(cex.axis=1)
+      boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",new.probs2[,order(new.maxProbsWhich, new.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
+              col=new.maxProbsCol2[order(new.maxProbsWhich,new.maxProbs)] )
+      
+      abline(col="grey",lty = 1, h = threshold)
+      
+      # How many subgroups of each colour are we plotting
+      tmp <- table(new.maxProbsCol)
+      desired_col_order <-c("blue", "red", "yellow2", "darkgreen")
+      to_sort <- names(tmp)
+      # Re order by correct sub group col order using match on the desired_col_order vector
+      tmp <- tmp[to_sort[order(match(to_sort,desired_col_order))]]
+      # Index of where to draw the sub group deviders via cumsum
+      grp.sum <- cumsum(tmp)
+      # Add 0.5 to grp.sum for abline
+      grp.sum <- grp.sum + 0.5
+      # Index out final element of grp.sum to get rid of unwanted final abline
+      grp.sum <- grp.sum[1:length(grp.sum)-1]
+      abline(v=grp.sum)
+      #lines(col="black",lwd=2,new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+      points(col=new.maxProbsCol[order(new.maxProbsWhich,new.maxProbs)],pch=19, new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+      legend("bottomleft", legend = c("WNT", "SHH", "Grp3", "Grp4"), col=c("blue", "red", "yellow2", "darkgreen"), pch=19)   
+      axis(2, las=2)
+      dev.off()
+      
+    })
+  # End output graph download ################
+  
+  
+  
+  
   # Output time taken ###############
   
   output$time <- renderText({
@@ -337,6 +402,9 @@ shinyServer(function(input, output) {
   })
   
   ###################################
+  
+  
+  
   
   
 }) # End shinyServer
