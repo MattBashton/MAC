@@ -263,6 +263,74 @@ shinyServer(function(input, output) {
   }) # End reactive classifier function
   
   
+  # Output classification_table #####
+  
+  output$classification_table <- renderDataTable({
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    results.df <- classified_data$results.df
+    # Change name to Subgroup Call of 2nd col
+    colnames(results.df)[2] <- "Subgroup Call"
+    # Add a probe QC column 
+    #results.df[,4] <- "Pass"
+    #colnames(results.df)[4] <- "Probe QC"
+    #failed.samples <- classified_data$failed.samples    
+    
+    # Apply threshold and label samples as unclassifiable 
+    thresholded_results.df <- results.df
+    for (i in 1:nrow(results.df)) {
+      if (!results.df[i,"Confidence"] > threshold) {
+        thresholded_results.df[i,"Subgroup Call"] <- "Unclassifiable" 
+        thresholded_results.df[i,"Confidence"] <- NA
+      }
+    }
+    
+    # Convert to percentage (because medics)
+    thresholded_results.df[,3] <- as.character(as.numeric(thresholded_results.df[,3])*100)
+    colnames(thresholded_results.df)[3] <- "Probability %"
+    thresholded_results.df[is.na(thresholded_results.df)] <- "-"
+    # Sort via sample ID (correctly)
+    thresholded_results.df <- thresholded_results.df[mixedorder(thresholded_results.df[,1]),]
+    return(thresholded_results.df)
+    
+  })
+  
+  output$downloadClassification <- downloadHandler(
+    filename = "MB_classification.csv",
+    content =  function(file) {
+      classified_data <- classifier()
+      if (is.null(classified_data)) return(NULL)
+      results.df <- classified_data$results.df
+      # Change name to Subgroup Call of 2nd col
+      colnames(results.df)[2] <- "Subgroup Call"
+      # Add a probe QC column 
+      #results.df[,4] <- "Pass"
+      #colnames(results.df)[4] <- "Probe QC"
+      #failed.samples <- classified_data$failed.samples
+      
+      # Apply threshold and label samples as unclassifiable 
+      thresholded_results.df <- results.df
+      for (i in 1:nrow(results.df)) {
+        if (!results.df[i,"Confidence"] > threshold) {
+          thresholded_results.df[i,"Subgroup Call"] <- "Unclassifiable" 
+          thresholded_results.df[i,"Confidence"] <- NA
+        }
+      }
+      
+      # Convert to percentage (because medics)
+      thresholded_results.df[,3] <- as.character(as.numeric(thresholded_results.df[,3])*100)
+      thresholded_results.df[is.na(thresholded_results.df)] <- "-"
+      # Sort via sample ID (correctly)
+      thresholded_results.df <- thresholded_results.df[mixedorder(thresholded_results.df[,1]),]
+      colnames(thresholded_results.df)[3] <- "Probability %"
+      write.csv(thresholded_results.df, file, row.names = FALSE) 
+      
+    }
+  )
+  
+  ###################################
+  
+  
   # Output graph ####################
   ## MB totally reworked to get sane graph of WNT, SHH, Grp3, Grp4
   output$classifierPlot <- renderPlot({
