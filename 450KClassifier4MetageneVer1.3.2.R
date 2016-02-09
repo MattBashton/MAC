@@ -84,7 +84,7 @@ sel2<- lapply(1:x, function(i) {
 
 ## MB this bit causes a delay
 Radial.svms <- mclapply(1:x, 
-                        mc.cores=8,
+                        mc.cores=4,
                         function(i)  svm(x = trainH[sel2[[i]],],  #t(trainH)[sel2[[i]],],
                                          y = Groups[sel2[[i]]], scale = F,
                                          tolerance = 0.00001, type = "C-classification",
@@ -96,7 +96,7 @@ Radial.svms <- mclapply(1:x,
 
 ## Test on input samples (hov)
 Radial.tests <- mclapply(1:x,
-                         mc.cores=8,
+                         mc.cores=4,
                          function(i) predict(Radial.svms[[i]],
                                              newdata=t(hov.H), # 4 Metagenes of input dataset 
                                              decision.values = T,

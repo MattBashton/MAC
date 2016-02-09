@@ -123,7 +123,7 @@ shinyServer(function(input, output) {
       ## MB this bit causes a delay
       incProgress(0.10, detail = paste("Assessing confidence of subgroup calls: stage 2"))
       Radial.svms <- mclapply(1:x, 
-                              mc.cores=8,
+                              mc.cores=4,
                               function(i)  svm(x = trainH[sel2[[i]],],  #t(trainH)[sel2[[i]],],
                                                y = Groups[sel2[[i]]], scale = F,
                                                tolerance = 0.00001, type = "C-classification",
@@ -136,7 +136,7 @@ shinyServer(function(input, output) {
       ## Test on input samples (hov)
       incProgress(0.10, detail = paste("Assessing confidence of subgroup calls: stage 3"))
       Radial.tests <- mclapply(1:x,
-                               mc.cores=8,
+                               mc.cores=4,
                                function(i) predict(Radial.svms[[i]],
                                                    newdata=t(hov.H), # 4 Metagenes of input dataset 
                                                    decision.values = T,
