@@ -4,8 +4,7 @@
 # 450K Classifer, Software Version 1.3.2 (Successful version)
 # Based on NMF projection and SVM algorithm
 
-# Input: NMB samples include: beta values of 10,000 probes from 450K methylation
-# profiling
+# Input: A zip file of idats and a sampleSheet.csv (as one would get from array provider)
 
 # Output: Classifier confidence and subgroup labels for input samples 4-group
 # classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
@@ -14,7 +13,7 @@
 AppName <- "MAC: Methylation Array Classifier"
 AppVersion <- "1.3.2-2.0"
 
-# Load librarys
+# Load all librarys now to speed up reactive part of code
 library(shiny)
 library(e1071) #for SVM classifier
 library(parallel)  # For mclapply speeds up probability estimation 
@@ -24,7 +23,7 @@ library(IlluminaHumanMethylation450kmanifest)
 library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
 library(IlluminaHumanMethylationEPICmanifest)
 library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
-library(RColorBrewer)
+#library(RColorBrewer)
 
 # Set Max upload size to 512MB!  Should allow ball park 48 samples max (not tested)
 options(shiny.maxRequestSize=512*1024^2)
