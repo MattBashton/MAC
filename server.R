@@ -12,18 +12,27 @@
 
 # For display later  
 AppName <- "MAC: Methylation Array Classifier"
-AppVersion <- "1.3.2"
+AppVersion <- "1.3.2-2.0"
 
 # Load librarys
 library(shiny)
 library(e1071) #for SVM classifier
 library(parallel)  # For mclapply speeds up probability estimation 
 library(gtools) # Needed for numerically rather than lexicographically sorted strings
+library(minfi)
+library(IlluminaHumanMethylation450kmanifest)
+library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+library(IlluminaHumanMethylationEPICmanifest)
+library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
+library(RColorBrewer)
+
+# Set Max upload size to 512MB!  Should allow ball park 48 samples max (not tested)
+options(shiny.maxRequestSize=512*1024^2)
 
 # Threshold for classification 
-# threshold <- 0.7045746
+threshold <- 0.7045746
 ### TESTING REMOVE LATER ###
-threshold <- 0.72
+#threshold <- 0.72
 
 ### Get input file name from UI
 shinyServer(function(input, output) {
@@ -88,13 +97,59 @@ shinyServer(function(input, output) {
       ptm <- proc.time()
       
       ## Get Input Dataset
-      tmp <- read.csv(inFile$datapath)
-      hov.final <- as.matrix(tmp[,-1])
-      rownames(hov.final) <- tmp[,1]
+      # Unzip a zip
+      incProgress(0.10, detail = paste("Unziping archive"))
+      unzip(inFile$datapath, exdir = ".", overwrite = TRUE, junkpaths = TRUE)
+      
+      # Old CSV version
+      #tmp <- read.csv(inFile$datapath)
+      #hov.final <- as.matrix(tmp[,-1])
+      #rownames(hov.final) <- tmp[,1]
+      
+      # Workout how many lines to skip on csv
+      
+      lines <- readLines("sampleSheet.csv")
+      lines_to_skip <- grep("Sample_Name", lines) - 1
+      
+      # Read in csv
+      incProgress(0.10, detail = paste("Reading sampleSheet.csv"))
+      targets <- read.csv("sampleSheet.csv", skip=lines_to_skip,header= TRUE, sep=",")
+      
+      # Use info from the sampleSheet to compose file names which are made up of
+      # Sentrix ID and position
+      targets$Basename <- paste(targets$Sentrix_ID,"_",targets$Sentrix_Position,sep="")
+      
+      # Read in 450k data from idat files to create a RGset both baseDir and targets 
+      # are set above, this can take some time for large datasets; RG set has data
+      # from both read and green channels of array.
+      incProgress(0.10, detail = paste("Loading .idat data"))
+      RGset <- read.metharray.exp(targets=targets, verbose = TRUE)
+      
+      # Store phenotype data by extracting it with pData accessor
+      pd <- pData(RGset)
+      
+      # Use this code later
+      # Density plots for QC in R session
+      #densityPlot(RGset, main = "Beta value distribution", xlab = "Beta value")
+      #densityBeanPlot(RGset, sampNames = pd$Sample_Name)
+      
+      # Normalise all they arrays 
+      # Noob is not fast, but is faster than SWAN!
+      incProgress(0.10, detail = paste("Normalising arrays"))
+      Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
+      
+      # Extract probes we need for the classifyer
+      load("Entire_10000_June2015.RData")
+      
+      # Extract beta values into numeric matrix, cols are samples rows are probes
+      hov.final <- getBeta(Mset)
       
       # check the probe names, choose only those 10,000 probes which are matched with the reference (n=434 Classifier) 
-      incProgress(0.10, detail = paste("Selecting 10k probes"))
+      incProgress(0.10, detail = paste("Selecting 10K probes"))
       hov.10 <- hov.final[rownames(hov.final) %in% rownames(disc.10),]
+      
+      # Change col names for those in pd cols should be same order as rows in pd
+      colnames(hov.10) <- pd$Sample_Name
       
       # Match features
       incProgress(0.10, detail = paste("Match features"))

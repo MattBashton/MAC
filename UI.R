@@ -16,13 +16,12 @@ shinyUI(fluidPage(theme = shinytheme("united"),
                     
                     sidebarPanel( # all the UI controls go in here
                       width=3,
-                      fileInput('file1', 'R CSV file upload:',
-                                accept=c('text/csv', 
-                                         'text/comma-separated-values,text/plain', 
-                                         '.csv')
+                      fileInput('file1', 'Zip file upload:',
+                                accept=c('application/zip', 
+                                         '.zip')
                       ),
-                      helpText("MAC will classify 450k array medulloblastoma methylation data in to one of four molecular subgroups"),
-                      "Download test data to try classifier:", a(href="GSE54880_test_set.csv", "Test CSV file", target="_blank")
+                      helpText("MAC will classify illumina X50k array medulloblastoma methylation data in to one of four molecular subgroups"),
+                      "Download test data to try classifier:", a(href="test_set.zip", "Test ZIP file", target="_blank"), helpText("Array processing and classification takes ~60 seconds for this test set of 24 arrays")
                     ), # End sidebarPanel
                     
                     
