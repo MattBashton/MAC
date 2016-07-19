@@ -30,8 +30,9 @@ options(shiny.maxRequestSize=512*1024^2)
 
 # Threshold for classification 
 threshold <- 0.7045746
-### TESTING REMOVE LATER ###
-#threshold <- 0.72
+
+# Cut-off for percentage of failed probes to reject an array from returning a classification
+percent_pval_cutoff <- 0.06
 
 ### Get input file name from UI
 shinyServer(function(input, output) {
@@ -97,8 +98,12 @@ shinyServer(function(input, output) {
       
       ## Get Input Dataset
       # Unzip a zip
+      
+      # Basedir
+      basedir <- dirname(inFile$datapath)
+      
       incProgress(0.10, detail = paste("Unziping archive"))
-      unzip(inFile$datapath, exdir = ".", overwrite = TRUE, junkpaths = TRUE)
+      unzip(inFile$datapath, exdir = basedir, overwrite = TRUE, junkpaths = TRUE)
       
       # Old CSV version
       #tmp <- read.csv(inFile$datapath)
@@ -106,13 +111,12 @@ shinyServer(function(input, output) {
       #rownames(hov.final) <- tmp[,1]
       
       # Workout how many lines to skip on csv
-      
-      lines <- readLines("sampleSheet.csv")
+      lines <- readLines(paste0(basedir,"/sampleSheet.csv"))
       lines_to_skip <- grep("Sample_Name", lines) - 1
       
       # Read in csv
       incProgress(0.10, detail = paste("Reading sampleSheet.csv"))
-      targets <- read.csv("sampleSheet.csv", skip=lines_to_skip,header= TRUE, sep=",")
+      targets <- read.csv(paste0(basedir,"/sampleSheet.csv"), skip=lines_to_skip,header= TRUE, sep=",")
       
       # Use info from the sampleSheet to compose file names which are made up of
       # Sentrix ID and position
@@ -122,7 +126,7 @@ shinyServer(function(input, output) {
       # are set above, this can take some time for large datasets; RG set has data
       # from both read and green channels of array.
       incProgress(0.10, detail = paste("Loading .idat data"))
-      RGset <- read.metharray.exp(targets=targets, verbose = TRUE)
+      RGset <- read.metharray.exp(base = basedir, targets=targets, verbose = TRUE)
       
       # Store phenotype data by extracting it with pData accessor
       pd <- pData(RGset)
@@ -135,7 +139,10 @@ shinyServer(function(input, output) {
       # Normalise all they arrays 
       # Noob is not fast, but is faster than SWAN!
       incProgress(0.10, detail = paste("Normalising arrays"))
+      # Noob is slow use Illumina is much faster but need to state ref explicidly
       Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
+      # Some times produces NAs Do not use!
+      # Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
       
       # Extract probes we need for the classifyer
       load("Entire_10000_June2015.RData")
@@ -149,6 +156,19 @@ shinyServer(function(input, output) {
       
       # Change col names for those in pd cols should be same order as rows in pd
       colnames(hov.10) <- pd$Sample_Name
+      
+      # Work out %age of hov.10 probes with detection p-value above 0.05 
+      incProgress(0.10, detail = paste("Acquiring detection p-values"))
+      pvals <- detectionP(RGset)
+      colnames(pvals) <- pd$Sample_Name
+      # Get only our 10k of intrest
+      pvals.10 <- pvals[rownames(pvals) %in% rownames(disc.10),]
+      TF.pvals.10 <- pvals.10 > 0.05
+      TF.pvals <- pvals > 0.05
+      # For 10k only
+      #percentfail <- round(apply(TF.pvals.10, 2, function(x) mean(x) * 100 ),digits = 2)
+      # Fow whole array
+      percentfail <- round(apply(TF.pvals, 2, function(x) mean(x) * 100 ),digits = 2)
       
       # Match features
       incProgress(0.10, detail = paste("Match features"))
@@ -296,7 +316,10 @@ shinyServer(function(input, output) {
                             maxProbs,
                             maxProbsCol,
                             maxProbsCol2,
-                            time)
+                            time,
+                            RGset,
+                            pd,
+                            percentfail)
     
     names(classified_data) <- c("results.df",
                                 "Total.No.of.Samples",
@@ -306,7 +329,10 @@ shinyServer(function(input, output) {
                                 "maxProbs",
                                 "maxProbsCol",
                                 "maxProbsCol2",
-                                "time")
+                                "time",
+                                "RGset",
+                                "pd",
+                                "percentfail")
     
     return(classified_data)
     
@@ -318,24 +344,40 @@ shinyServer(function(input, output) {
   
   
   # Output classification_table #####
-  
   output$classification_table <- renderDataTable({
     classified_data <- classifier()
     if (is.null(classified_data)) return(NULL)
     results.df <- classified_data$results.df
     # Change name to Subgroup Call of 2nd col
     colnames(results.df)[2] <- "Subgroup Call"
-    # Add a probe QC column 
-    #results.df[,4] <- "Pass"
-    #colnames(results.df)[4] <- "Probe QC"
-    #failed.samples <- classified_data$failed.samples    
     
+    # Add percent failed column 
+    percentfail <- classified_data$percentfail
+    results.df[,4] <- percentfail 
+    colnames(results.df)[4] <- "% failed probes"
+    
+    # Add Array QC col
+    results.df[,5] <- "Pass"
+    colnames(results.df)[5] <- "Array QC"
+     
     # Apply threshold and label samples as unclassifiable 
     thresholded_results.df <- results.df
+    i <- 1
     for (i in 1:nrow(results.df)) {
       if (!results.df[i,"Confidence"] > threshold) {
         thresholded_results.df[i,"Subgroup Call"] <- "Unclassifiable" 
         thresholded_results.df[i,"Confidence"] <- NA
+        thresholded_results.df[i,"Array QC"] <- "Pass"
+      }
+    }
+    
+    # Apply percent_pval_cutoff to percentfail
+    i <- 1
+    for (i in 1:nrow(results.df)) {
+      if (results.df[i,"% failed probes"] > percent_pval_cutoff) {
+        thresholded_results.df[i,"Subgroup Call"] <- "-" 
+        thresholded_results.df[i,"Confidence"] <- NA
+        thresholded_results.df[i,"Array QC"] <- "Fail"
       }
     }
     
@@ -357,10 +399,15 @@ shinyServer(function(input, output) {
       results.df <- classified_data$results.df
       # Change name to Subgroup Call of 2nd col
       colnames(results.df)[2] <- "Subgroup Call"
-      # Add a probe QC column 
-      #results.df[,4] <- "Pass"
-      #colnames(results.df)[4] <- "Probe QC"
-      #failed.samples <- classified_data$failed.samples
+    
+      # Add percent failed column 
+      percentfail <- classified_data$percentfail
+      results.df[,4] <- percentfail 
+      colnames(results.df)[4] <- "% failed probes"
+      
+      # Add Array QC col
+      results.df[,5] <- "Pass"
+      colnames(results.df)[5] <- "Array QC"
       
       # Apply threshold and label samples as unclassifiable 
       thresholded_results.df <- results.df
@@ -368,6 +415,16 @@ shinyServer(function(input, output) {
         if (!results.df[i,"Confidence"] > threshold) {
           thresholded_results.df[i,"Subgroup Call"] <- "Unclassifiable" 
           thresholded_results.df[i,"Confidence"] <- NA
+          thresholded_results.df[i,"Array QC"] <- "Pass"
+        }
+      }
+      
+      # Apply percent_pval_cutoff to percentfail
+      for (i in 1:nrow(results.df)) {
+        if (results.df[i,"% failed probes"] > percent_pval_cutoff) {
+          thresholded_results.df[i,"Subgroup Call"] <- "-" 
+          thresholded_results.df[i,"Confidence"] <- NA
+          thresholded_results.df[i,"Array QC"] <- "Fail"
         }
       }
       
@@ -398,6 +455,7 @@ shinyServer(function(input, output) {
     maxProbs <- classified_data$maxProbs
     maxProbsCol <- classified_data$maxProbsCol
     maxProbsCol2 <- classified_data$maxProbsCol2
+    percentfail <- classified_data$percentfail
     
     # New plot code
     cat(paste("Removing data points below threshold", threshold, "from graph:\n"))
@@ -409,6 +467,18 @@ shinyServer(function(input, output) {
     new.maxProbsCol <- maxProbsCol[index]
     new.maxProbsCol2 <- maxProbsCol2[index]
     new.Total.No.of.Samples <- length(maxProbs[index])
+    new.percentfail <- percentfail[index]
+    
+    # New remove Array QC fail samples
+    cat(paste("Removing data points below percent_pval_cut_off", percent_pval_cutoff, "from graph:\n"))
+    index <- !new.percentfail > percent_pval_cutoff
+    cat(names(new.maxProbs[!index]), "\n")
+    final.probs2 <- new.probs2[,index]
+    final.maxProbs <- new.maxProbs[index]
+    final.maxProbsWhich <- new.maxProbsWhich[index]
+    final.maxProbsCol <- new.maxProbsCol[index]
+    final.maxProbsCol2 <- new.maxProbsCol2[index]
+    final.Total.No.of.Samples <- length(new.maxProbs[index])
     
     par(mfrow=c(1,1))
     #par(mar=c(6,4,2,1) + 0.1)
@@ -416,15 +486,15 @@ shinyServer(function(input, output) {
     par(cex=1.3)
     par(cex.axis=1)
     
-    heading <- paste("Medulloblastoma subgroup call confidence intervals for", new.Total.No.of.Samples, "samples")
+    heading <- paste("Medulloblastoma subgroup call confidence intervals for", final.Total.No.of.Samples, "samples")
     
-    boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",new.probs2[,order(new.maxProbsWhich, new.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
-            col=new.maxProbsCol2[order(new.maxProbsWhich,new.maxProbs)] )
+    boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",final.probs2[,order(final.maxProbsWhich, final.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
+            col=final.maxProbsCol2[order(final.maxProbsWhich,final.maxProbs)] )
     
     abline(col="grey",lty = 1, h = threshold)
     
     # How many subgroups of each colour are we plotting
-    tmp <- table(new.maxProbsCol)
+    tmp <- table(final.maxProbsCol)
     desired_col_order <-c("blue", "red", "yellow2", "darkgreen")
     to_sort <- names(tmp)
     # Re order by correct sub group col order using match on the desired_col_order vector
@@ -439,7 +509,7 @@ shinyServer(function(input, output) {
     grp.sum
     abline(v=grp.sum)
     #lines(col="black",lwd=2,new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
-    points(col=new.maxProbsCol[order(new.maxProbsWhich,new.maxProbs)],pch=19, new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+    points(col=final.maxProbsCol[order(final.maxProbsWhich,final.maxProbs)],pch=19, final.maxProbs[order(final.maxProbsWhich,final.maxProbs)])
     legend("bottomleft", legend = c("WNT", "SHH", "Grp3", "Grp4"), col=c("blue", "red", "yellow2", "darkgreen"), pch=19)   
     axis(2, las=2)     
     
@@ -475,20 +545,31 @@ shinyServer(function(input, output) {
       new.maxProbsCol2 <- maxProbsCol2[index]
       new.Total.No.of.Samples <- length(maxProbs[index])
       
-      heading <- paste("Medulloblastoma subgroup call confidence intervals for", new.Total.No.of.Samples, "samples")
+      # New remove Array QC fail samples
+      cat(paste("Removing data points below percent_pval_cut_off", percent_pval_cutoff, "from graph:\n"))
+      index <- !new.percentfail > percent_pval_cutoff
+      cat(names(new.maxProbs[!index]), "\n")
+      final.probs2 <- new.probs2[,index]
+      final.maxProbs <- new.maxProbs[index]
+      final.maxProbsWhich <- new.maxProbsWhich[index]
+      final.maxProbsCol <- new.maxProbsCol[index]
+      final.maxProbsCol2 <- new.maxProbsCol2[index]
+      final.Total.No.of.Samples <- length(new.maxProbs[index])
+      
+      heading <- paste("Medulloblastoma subgroup call confidence intervals for", final.Total.No.of.Samples, "samples")
       
       png(file, height = 1280, width = 1440)
       par(mfrow=c(1,1))
       par(mar=c(7,4,4,1) + 0.1)
       par(cex=2)
       par(cex.axis=1)
-      boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",new.probs2[,order(new.maxProbsWhich, new.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
-              col=new.maxProbsCol2[order(new.maxProbsWhich,new.maxProbs)] )
+      boxplot(yaxt="n",xlab="",main=heading,ylab="Probability",final.probs2[,order(final.maxProbsWhich, final.maxProbs)],outpch=NA,ylim=c(0,1),las=2,
+              col=final.maxProbsCol2[order(final.maxProbsWhich,final.maxProbs)] )
       
       abline(col="grey",lty = 1, h = threshold)
       
       # How many subgroups of each colour are we plotting
-      tmp <- table(new.maxProbsCol)
+      tmp <- table(final.maxProbsCol)
       desired_col_order <-c("blue", "red", "yellow2", "darkgreen")
       to_sort <- names(tmp)
       # Re order by correct sub group col order using match on the desired_col_order vector
@@ -501,7 +582,7 @@ shinyServer(function(input, output) {
       grp.sum <- grp.sum[1:length(grp.sum)-1]
       abline(v=grp.sum)
       #lines(col="black",lwd=2,new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
-      points(col=new.maxProbsCol[order(new.maxProbsWhich,new.maxProbs)],pch=19, new.maxProbs[order(new.maxProbsWhich,new.maxProbs)])
+      points(col=final.maxProbsCol[order(final.maxProbsWhich,final.maxProbs)],pch=19, final.maxProbs[order(final.maxProbsWhich,final.maxProbs)])
       legend("bottomleft", legend = c("WNT", "SHH", "Grp3", "Grp4"), col=c("blue", "red", "yellow2", "darkgreen"), pch=19)   
       axis(2, las=2)
       dev.off()
@@ -509,8 +590,89 @@ shinyServer(function(input, output) {
     })
   # End output graph download ################
   
+  # Output density plot ####################
+  output$DensityPlot <- renderPlot({
+    
+    # Get data
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    
+    # Extract RGset
+    RGset <- classified_data$RGset
+    pd <- classified_data$pd
+    
+    # Plot
+    densityPlot(RGset, main = "Beta value distribution")
+    
+  })
+  # End output density plot
+
+  # Download density plot ####################
+  output$DenistyPlotDownload <- downloadHandler(
+    
+    filename = "Beta_value_distribution.png",
+    content = function(file) {
+      
+      # Get data
+      classified_data <- classifier()
+      if (is.null(classified_data)) return(NULL)
+      
+      # Extract RGset
+      RGset <- classified_data$RGset
+      pd <- classified_data$pd
+      
+      # Plot
+      png(file, height = 1280, width = 1440)
+      par(cex=2)
+      par(cex.axis=1)
+      densityPlot(RGset, main = "Beta value distribution")
+      dev.off()
+      
+    })
+  # End density plot download
   
+  # Output density bean plot ####################
+  output$DensityBeanPlot <- renderPlot({
+    
+    # Get data
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    
+    # Extract RGset
+    RGset <- classified_data$RGset
+    pd <- classified_data$pd
+    
+    # Plot
+    par(mar=c(5.1,9.1,4.1,2.1))
+    densityBeanPlot(RGset, sampNames = pd$Sample_Name, main = "Beta value density bean plot")
+    
+  })
+  # End output bean density plot
   
+  # Download density bean plot ####################
+  output$DenistyBeanPlotDownload <- downloadHandler(
+    
+    filename = "Beta_value_bean_plot.png",
+    content = function(file) {
+      
+      # Get data
+      classified_data <- classifier()
+      if (is.null(classified_data)) return(NULL)
+      
+      # Extract RGset
+      RGset <- classified_data$RGset
+      pd <- classified_data$pd
+      
+      # Plot
+      par(mar=c(5.1,9.1,4.1,2.1))
+      png(file, height = 1280, width = 1440)
+      par(cex=2)
+      par(cex.axis=1)
+      densityBeanPlot(RGset, sampNames = pd$Sample_Name, main = "Beta value density bean plot")
+      dev.off()
+      
+    })
+  # End density bean plot download
   
   # Output time taken ###############
   
@@ -525,8 +687,6 @@ shinyServer(function(input, output) {
   
   ###################################
   
-  
-  
-  
+
   
 }) # End shinyServer
