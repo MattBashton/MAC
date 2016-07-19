@@ -544,6 +544,7 @@ shinyServer(function(input, output) {
       new.maxProbsCol <- maxProbsCol[index]
       new.maxProbsCol2 <- maxProbsCol2[index]
       new.Total.No.of.Samples <- length(maxProbs[index])
+      new.percentfail <- percentfail[index]
       
       # New remove Array QC fail samples
       cat(paste("Removing data points below percent_pval_cut_off", percent_pval_cutoff, "from graph:\n"))
