@@ -156,6 +156,8 @@ shinyServer(function(input, output) {
       hov.10 <- as.matrix(hov.final[rownames(hov.final) %in% rownames(disc.10),])
       
       # We need to remove rows which have NAs, these are not common but NMB_941
+      # Check NAs
+      nas <- colSums(is.na(hov.10))
       # (EPIC) has one if you use preprocessIllumina()
       # Convert to df to use na.omit then back to matrix
       hov.10 <- as.matrix(na.omit(data.frame(hov.10)))
@@ -326,7 +328,8 @@ shinyServer(function(input, output) {
                             time,
                             RGset,
                             pd,
-                            percentfail)
+                            percentfail,
+                            nas)
     
     names(classified_data) <- c("results.df",
                                 "Total.No.of.Samples",
@@ -339,7 +342,8 @@ shinyServer(function(input, output) {
                                 "time",
                                 "RGset",
                                 "pd",
-                                "percentfail")
+                                "percentfail",
+                                "nas")
     
     return(classified_data)
     
@@ -418,6 +422,7 @@ shinyServer(function(input, output) {
       
       # Apply threshold and label samples as unclassifiable 
       thresholded_results.df <- results.df
+      i <- 1
       for (i in 1:nrow(results.df)) {
         if (!results.df[i,"Confidence"] > threshold) {
           thresholded_results.df[i,"Subgroup Call"] <- "Unclassifiable" 
@@ -427,6 +432,7 @@ shinyServer(function(input, output) {
       }
       
       # Apply percent_pval_cutoff to percentfail
+      i <- 1
       for (i in 1:nrow(results.df)) {
         if (results.df[i,"% failed probes"] > percent_pval_cutoff) {
           thresholded_results.df[i,"Subgroup Call"] <- "-" 
@@ -706,6 +712,62 @@ shinyServer(function(input, output) {
       
     })
   # End density bean plot download
+  
+  # Output number of failed samples #
+  output$fs <- renderText({
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    
+    # Need to remove failed Array QC samples from this list
+    results.df <- classified_data$results.df
+    percentfail <- classified_data$percentfail
+    results.df[,4] <- percentfail 
+    #colnames(results.df)[4] <- "% failed probes"
+    results.df <- results.df[results.df[,4] < percent_pval_cutoff,]
+    failed.samples <- sum(percentfail > percent_pval_cutoff)
+    failed_sample_names <- names(percentfail)[which(percentfail > percent_pval_cutoff)]
+    
+    if (failed.samples > 0) {
+      c(failed.samples, "sample(s) failed Array QC having ", percent_pval_cutoff,"%", "or more probes with a detection p-value over 0.05:", paste(failed_sample_names, collapse = ", "))
+    } else if (failed.samples == 0) {
+      "All samples passed Array QC"
+    }
+    
+  })
+  
+  ###################################
+  
+  # List samples (if any) that could not be classified above the threshold
+  output$fc <- renderText({
+    
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    
+    # Need to remove failed Array QC samples from this list
+    results.df <- classified_data$results.df
+    percentfail <- classified_data$percentfail
+    results.df[,4] <- percentfail 
+    #colnames(results.df)[4] <- "% failed probes"
+    results.df <- results.df[results.df[,4] < percent_pval_cutoff,]
+    
+    if(nrow(results.df) > 0) {
+      # Now run existing code
+      unclassifiable <- results.df[results.df[3] < threshold, 1]
+      
+      if (length(unclassifiable) > 0) {
+        c(length(unclassifiable), "samples(s) passing Array QC could not be confidently assigned a subgroup call:", paste(unclassifiable, collapse = ", "))
+      } else if (length(unclassifiable) == 0) {
+        "All samples passing Array QC were successfully assigned a subgroup"
+      }
+      
+      # End nrow(results.df) > 0
+    } else if (nrow(results.df) == 0) {
+      "All samples failed Array QC, no samples can be classified"
+    }
+    
+  })
+  
+  ###################################
   
   # Output time taken ###############
   
