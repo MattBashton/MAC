@@ -32,7 +32,7 @@ options(shiny.maxRequestSize=512*1024^2)
 threshold <- 0.7045746
 
 # Cut-off for percentage of failed probes to reject an array from returning a classification
-percent_pval_cutoff <- 0.06
+percent_pval_cutoff <- 5
 
 ### Get input file name from UI
 shinyServer(function(input, output) {
@@ -140,9 +140,9 @@ shinyServer(function(input, output) {
       # Noob is not fast, but is faster than SWAN!
       incProgress(0.10, detail = paste("Normalising arrays"))
       # Noob is slow use Illumina is much faster but need to state ref explicidly
-      Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
-      # Some times produces NAs Do not use!
-      # Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
+      #Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
+      # Sometimes produces NAs Do not use!
+      Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
       
       # Extract probes we need for the classifyer
       load("Entire_10000_June2015.RData")
@@ -152,13 +152,20 @@ shinyServer(function(input, output) {
       
       # check the probe names, choose only those 10,000 probes which are matched with the reference (n=434 Classifier) 
       incProgress(0.10, detail = paste("Selecting 10K probes"))
-      hov.10 <- hov.final[rownames(hov.final) %in% rownames(disc.10),]
+      # hov.10 needs to be a matrix so it will work with a single sample
+      hov.10 <- as.matrix(hov.final[rownames(hov.final) %in% rownames(disc.10),])
+      
+      # We need to remove rows which have NAs, these are not common but NMB_941
+      # (EPIC) has one if you use preprocessIllumina()
+      # Convert to df to use na.omit then back to matrix
+      hov.10 <- as.matrix(na.omit(data.frame(hov.10)))
       
       # Change col names for those in pd cols should be same order as rows in pd
       colnames(hov.10) <- pd$Sample_Name
       
       # Work out %age of hov.10 probes with detection p-value above 0.05 
       incProgress(0.10, detail = paste("Acquiring detection p-values"))
+      #### Issue detectionP won't work on a single array! ####
       pvals <- detectionP(RGset)
       colnames(pvals) <- pd$Sample_Name
       # Get only our 10k of intrest
@@ -533,6 +540,7 @@ shinyServer(function(input, output) {
       maxProbs <- classified_data$maxProbs
       maxProbsCol <- classified_data$maxProbsCol
       maxProbsCol2 <- classified_data$maxProbsCol2
+      percentfail <- classified_data$percentfail
       
       # Code to remove samples below threshold from plot
       cat(paste("Removing data points below threshold", threshold, "from graph:\n"))
@@ -591,6 +599,20 @@ shinyServer(function(input, output) {
     })
   # End output graph download ################
   
+  # Output renderUI for density plot #########
+  
+  output$ui <- renderUI({
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    
+    RGset <- classified_data$RGset
+    pd <- classified_data$pd
+    SampleNames <- as.character(pd[,1])
+    
+    selectInput("dynamic", "Sample to plot", choices = SampleNames, selected = SampleNames[1])
+  })
+  ############################################
+  
   # Output density plot ####################
   output$DensityPlot <- renderPlot({
     
@@ -602,12 +624,17 @@ shinyServer(function(input, output) {
     RGset <- classified_data$RGset
     pd <- classified_data$pd
     
+    # Get sample name
+    if (is.null(input$dynamic)) return(NULL)
+    SampleName <- input$dynamic
+    Basename <- pd[pd[,1] == SampleName,]$Basename
+    
     # Plot
-    densityPlot(RGset, main = "Beta value distribution")
+    densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", SampleName))
     
   })
   # End output density plot
-
+  
   # Download density plot ####################
   output$DenistyPlotDownload <- downloadHandler(
     
@@ -622,11 +649,16 @@ shinyServer(function(input, output) {
       RGset <- classified_data$RGset
       pd <- classified_data$pd
       
+      # Get sample name
+      if (is.null(input$dynamic)) return(NULL)
+      SampleName <- input$dynamic
+      Basename <- pd[pd[,1] == SampleName,]$Basename
+      
       # Plot
       png(file, height = 1280, width = 1440)
       par(cex=2)
       par(cex.axis=1)
-      densityPlot(RGset, main = "Beta value distribution")
+      densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", SampleName))
       dev.off()
       
     })
