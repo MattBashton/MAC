@@ -465,6 +465,7 @@ shinyServer(function(input, output) {
     Sample_Names <- as.character(pd[,1])
     nas.df <- cbind(Sample_Names, nas)
     colnames(nas.df) <- c("Sample","Number of probes with missing values")
+    nas.df <- nas.df[mixedorder(nas.df[,1]),]
     return(nas.df)
   })
   ###################################
