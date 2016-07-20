@@ -9,6 +9,8 @@
 # Output: Classifier confidence and subgroup labels for input samples 4-group
 # classifier (WNT,SHH, Grp3 and Grp4) - 4 metagenes
 
+# For test-set.zip of 24 medullos peak memory usage is around 1.6GB 
+
 # For display later  
 AppName <- "MAC: Methylation Array Classifier"
 AppVersion <- "1.3.2-2.0"
@@ -141,7 +143,7 @@ shinyServer(function(input, output) {
       incProgress(0.10, detail = paste("Normalising arrays"))
       # Noob is slow use Illumina is much faster but need to state ref explicidly
       #Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
-      # Sometimes produces NAs Do not use!
+      # Sometimes produces NAs (fixed this issue by removeing those with omit.na)
       Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
       
       # Extract probes we need for the classifyer
@@ -454,6 +456,21 @@ shinyServer(function(input, output) {
   
   ###################################
   
+  # Output NA_table #####
+  output$NA_table <- renderDataTable({
+    classified_data <- classifier()
+    if (is.null(classified_data)) return(NULL)
+    nas <- classified_data$nas
+    pd <- classified_data$pd
+    Sample_Names <- as.character(pd[,1])
+    nas.df <- cbind(Sample_Names, nas)
+    colnames(nas.df) <- c("Sample","Number of probes with missing values")
+    return(nas.df)
+  })
+  ###################################
+  
+  
+  ###################################
   
   # Output graph ####################
   ## MB totally reworked to get sane graph of WNT, SHH, Grp3, Grp4
@@ -613,9 +630,9 @@ shinyServer(function(input, output) {
     
     RGset <- classified_data$RGset
     pd <- classified_data$pd
-    SampleNames <- as.character(pd[,1])
+    Sample_Names <- as.character(pd[,1])
     
-    selectInput("dynamic", "Sample to plot", choices = SampleNames, selected = SampleNames[1])
+    selectInput("dynamic", "Sample to plot:", choices = Sample_Names, selected = Sample_Names[1])
   })
   ############################################
   
@@ -632,11 +649,11 @@ shinyServer(function(input, output) {
     
     # Get sample name
     if (is.null(input$dynamic)) return(NULL)
-    SampleName <- input$dynamic
-    Basename <- pd[pd[,1] == SampleName,]$Basename
+    Sample_Name <- input$dynamic
+    Basename <- pd[pd[,1] == Sample_Name,]$Basename
     
     # Plot
-    densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", SampleName))
+    densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", Sample_Name))
     
   })
   # End output density plot
@@ -657,14 +674,14 @@ shinyServer(function(input, output) {
       
       # Get sample name
       if (is.null(input$dynamic)) return(NULL)
-      SampleName <- input$dynamic
-      Basename <- pd[pd[,1] == SampleName,]$Basename
+      Sample_Name <- input$dynamic
+      Basename <- pd[pd[,1] == Sample_Name,]$Basename
       
       # Plot
       png(file, height = 1280, width = 1440)
       par(cex=2)
       par(cex.axis=1)
-      densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", SampleName))
+      densityPlot(RGset[,Basename], main = paste0("Beta value distribution for sample ", Sample_Name))
       dev.off()
       
     })
