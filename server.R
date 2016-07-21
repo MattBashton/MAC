@@ -142,9 +142,9 @@ shinyServer(function(input, output) {
       # Noob is not fast, but is faster than SWAN!
       incProgress(0.10, detail = paste("Normalising arrays"))
       # Noob is slow use Illumina is much faster but need to state ref explicidly
-      #Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
+      Mset <- preprocessNoob(rgSet = RGset, dyeCorr = TRUE, verbose = TRUE)
       # Sometimes produces NAs (fixed this issue by removeing those with omit.na)
-      Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
+      #Mset <- preprocessIllumina(rgSet = RGset, bg.correct = TRUE)
       
       # Extract probes we need for the classifyer
       load("Entire_10000_June2015.RData")
@@ -186,7 +186,7 @@ shinyServer(function(input, output) {
       hov.match <- DW.MP.Match.and.Select(disc.10, hov.10)
       ## Match W matrix
       incProgress(0.10, detail = paste("Match W matrix"))
-      hov.H <- DW.MP.Factors.Project.C(hov.10, avgW.4)  # applying the Moore-Penrose pseduoinverse of Wm (avgw.4) to the input data.
+      hov.H <- DW.MP.Factors.Project.C(hov.10, avgW.4)  # applying the Moore-Penrose pseduoinverse of Wm(-1) (avgw.4) to the input data.
       
       
       ## Creating the classifier model using SVM
